@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Universal Video Downloader & Summarizer</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg,#667eea 0%,#764ba2 100%); min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+    .container { background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); border-radius:20px; padding:40px; box-shadow:0 20px 40px rgba(0,0,0,0.1); width:100%; max-width:600px; animation:slideUp 0.6s ease-out; }
+    @keyframes slideUp { from { opacity:0; transform:translateY(30px);} to {opacity:1; transform:translateY(0);} }
+    .header { text-align:center; margin-bottom:30px; }
+    .header h1 { color:#333; font-size:2.5rem; margin-bottom:10px; background: linear-gradient(135deg,#667eea,#764ba2); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+    .header p { color:#666; font-size:1.1rem; }
+    .platform-icons { display:flex; justify-content:center; gap:20px; margin:20px 0; }
+    .platform-icon { width:50px; height:50px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:24px; color:white; transition: transform 0.3s ease; }
+    .platform-icon:hover { transform: scale(1.1); }
+    .youtube { background: #ff0000; }
+    .instagram { background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888); }
+    .input-section { margin-bottom:30px; }
+    .url-input { width:100%; padding:15px 20px; font-size:16px; border:2px solid #e0e0e0; border-radius:12px; outline:none; transition: all 0.3s ease; margin-bottom:20px; }
+    .url-input:focus { border-color:#667eea; box-shadow:0 0 0 3px rgba(102,126,234,0.1); }
+    .format-selector { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:20px; }
+    .format-btn { padding:10px 20px; border:2px solid #e0e0e0; background:white; border-radius:25px; cursor:pointer; transition:all 0.3s ease; font-size:14px; color:#666; }
+    .format-btn.active { background:#667eea; color:white; border-color:#667eea; }
+    .format-btn:hover { border-color:#667eea; transform:translateY(-2px); }
+    .analyze-btn, .download-btn, .transcribe-btn { width:100%; padding:15px; background:linear-gradient(135deg,#667eea,#764ba2); color:white; border:none; border-radius:12px; font-size:18px; font-weight:600; cursor:pointer; transition: all 0.3s ease; position:relative; overflow:hidden; margin-bottom:10px; }
+    .analyze-btn:hover, .download-btn:hover, .transcribe-btn:hover { transform:translateY(-2px); box-shadow:0 10px 20px rgba(102,126,234,0.3); }
+    .analyze-btn:disabled, .download-btn:disabled, .transcribe-btn:disabled { opacity:0.6; cursor:not-allowed; transform:none; }
+    .loader { display:none; width:20px; height:20px; border:2px solid #fff; border-top:2px solid transparent; border-radius:50%; animation:spin 1s linear infinite; margin-right:10px; }
+    @keyframes spin { 0%{transform:rotate(0deg);} 100%{transform:rotate(360deg);} }
+    .result-section { margin-top:30px; padding:20px; background:#f8f9fa; border-radius:12px; display:none; }
+    .summary-section, .transcript-section { margin-top:15px; padding:15px; background:#fff; border-radius:8px; border:1px solid #e0e0e0; display:none; white-space:pre-wrap; color:#333; }
+    .download-link { display:inline-block; padding:10px 20px; background:#28a745; color:white; text-decoration:none; border-radius:6px; margin-top:10px; transition:background 0.3s ease; }
+    .download-link:hover { background:#218838; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Video Downloader & Summarizer</h1>
+      <p>Download and summarize videos from YouTube & Instagram</p>
+      <div class="platform-icons">
+        <div class="platform-icon youtube">📺</div>
+        <div class="platform-icon instagram">📸</div>
+      </div>
+    </div>
+
+    <div class="warning">
+      ⚠ <strong>Important:</strong> Make sure the backend server is running on port 3000. Respect platform terms and copyright laws.
+    </div>
+
+    <div class="input-section">
+      <input type="url" class="url-input" id="videoUrl" placeholder="Paste your video URL here">
+      <div class="format-selector">
+        <button class="format-btn active" data-format="mp4">MP4 Video</button>
+        <button class="format-btn" data-format="mp3">MP3 Audio</button>
+      </div>
+
+      <!-- First: Download + Transcribe -->
+      <button class="download-btn" id="downloadBtn">
+        <div class="loader" id="downloadLoader"></div>
+        <span id="downloadBtnText">Download</span>
+      </button>
+
+      <button class="transcribe-btn" id="transcribeBtn" style="display:none;">
+        <div class="loader" id="transcribeLoader"></div>
+        <span id="transcribeBtnText">Transcribe Audio</span>
+      </button>
+
+      <!-- Then: Analyze & Summarize -->
+      <button class="analyze-btn" id="analyzeBtn" style="display:none;">
+        <div class="loader" id="analyzeLoader"></div>
+        <span id="analyzeBtnText">Analyze & Summarize</span>
+      </button>
+    </div>
+
+    <div class="result-section" id="resultSection">
+      <div class="summary-section" id="summarySection">
+        <h4>Video Summary:</h4>
+        <div id="summaryText">--</div>
+      </div>
+
+      <div class="transcript-section" id="transcriptSection">
+        <h4>Audio Transcript:</h4>
+        <div id="transcriptText">--</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  class VideoDownloader {
+    constructor() {
+      this.selectedFormat = 'mp4';
+      this.apiBaseUrl = 'http://localhost:3000/api';
+      this.lastDownloadedFile = null;
+      this.init();
+    }
+
+    init() {
+      this.bindEvents();
+      this.toggleButtons();
+    }
+
+    bindEvents() {
+      document.querySelectorAll('.format-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          document.querySelectorAll('.format-btn').forEach(b => b.classList.remove('active'));
+          e.target.classList.add('active');
+          this.selectedFormat = e.target.dataset.format;
+          this.toggleButtons();
+        });
+      });
+
+      document.getElementById('analyzeBtn').addEventListener('click', () => this.analyzeVideo());
+      document.getElementById('downloadBtn').addEventListener('click', () => this.downloadMedia());
+      document.getElementById('transcribeBtn').addEventListener('click', () => this.transcribeAudio());
+    }
+
+    toggleButtons() {
+      if (this.selectedFormat === "mp4") {
+        document.getElementById("analyzeBtn").style.display = "none";
+        document.getElementById("transcribeBtn").style.display = "none";
+        document.getElementById("summarySection").style.display = "none";
+        document.getElementById("transcriptSection").style.display = "none";
+      } else {
+        document.getElementById("analyzeBtn").style.display = "block";
+        document.getElementById("transcribeBtn").style.display = "block";
+      }
+    }
+
+    async analyzeVideo() {
+      const url = document.getElementById('videoUrl').value.trim();
+      if (!url) return alert("Please enter a video URL");
+
+      this.showAnalyzeLoading(true);
+      try {
+        const bodyPayload = { url };
+
+        if (this.lastDownloadedFile && this.selectedFormat === "mp3") {
+          bodyPayload.filename = this.lastDownloadedFile;
+        }
+
+        const response = await fetch(`${this.apiBaseUrl}/summarize`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(bodyPayload)
+        });
+
+        const data = await response.json();
+        if (data.error) throw new Error(data.error);
+
+        const transcriptText = data.transcript || data.summary || "No transcript available.";
+
+        document.getElementById("summarySection").style.display = "block";
+        document.getElementById("summaryText").innerText = transcriptText;
+
+        document.getElementById("transcriptSection").style.display = "block";
+        document.getElementById("transcriptText").innerText = transcriptText;
+
+        document.getElementById("resultSection").style.display = "block";
+      } catch (err) {
+        alert("Analysis failed: " + err.message);
+      } finally {
+        this.showAnalyzeLoading(false);
+      }
+    }
+
+    async downloadMedia() {
+      const url = document.getElementById('videoUrl').value.trim();
+      if (!url) return alert("Please enter a video URL");
+
+      this.showDownloadLoading(true);
+      try {
+        const endpoint = this.selectedFormat === "mp3" ? "/download-audio" : "/download";
+        const response = await fetch(`${this.apiBaseUrl}${endpoint}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url, format: this.selectedFormat })
+        });
+
+        const data = await response.json();
+        if (data.error) throw new Error(data.error);
+
+        this.lastDownloadedFile = data.file;
+
+        const link = document.createElement("a");
+        link.href = data.downloadUrl;
+        link.download = data.file;
+        link.click();
+
+        document.getElementById("resultSection").style.display = "block";
+
+        if (this.selectedFormat === "mp3") {
+          document.getElementById("transcribeBtn").style.display = "block";
+        } else {
+          document.getElementById("transcribeBtn").style.display = "none";
+        }
+      } catch (err) {
+        alert("Download failed: " + err.message);
+      } finally {
+        this.showDownloadLoading(false);
+      }
+    }
+
+    async transcribeAudio() {
+      if (!this.lastDownloadedFile) return alert("No audio file available for transcription");
+
+      this.showTranscribeLoading(true);
+      try {
+        const response = await fetch(`${this.apiBaseUrl}/transcribe-audio`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filename: this.lastDownloadedFile })
+        });
+
+        const data = await response.json();
+        if (data.error) throw new Error(data.error);
+
+        const transcriptText = data.transcript || "No transcript available.";
+
+        document.getElementById("transcriptSection").style.display = "block";
+        document.getElementById("transcriptText").innerText = transcriptText;
+
+        document.getElementById("summarySection").style.display = "block";
+        document.getElementById("summaryText").innerText = transcriptText;
+      } catch (err) {
+        alert("Transcription failed: " + err.message);
+      } finally {
+        this.showTranscribeLoading(false);
+      }
+    }
+
+    showAnalyzeLoading(isLoading) {
+      document.getElementById("analyzeLoader").style.display = isLoading ? "inline-block" : "none";
+      document.getElementById("analyzeBtnText").innerText = isLoading ? "Analyzing..." : "Analyze & Summarize";
+      document.getElementById("analyzeBtn").disabled = isLoading;
+    }
+
+    showDownloadLoading(isLoading) {
+      document.getElementById("downloadLoader").style.display = isLoading ? "inline-block" : "none";
+      document.getElementById("downloadBtnText").innerText = isLoading ? "Downloading..." : "Download";
+      document.getElementById("downloadBtn").disabled = isLoading;
+    }
+
+    showTranscribeLoading(isLoading) {
+      document.getElementById("transcribeLoader").style.display = isLoading ? "inline-block" : "none";
+      document.getElementById("transcribeBtnText").innerText = isLoading ? "Transcribing..." : "Transcribe Audio";
+      document.getElementById("transcribeBtn").disabled = isLoading;
+    }
+  }
+
+  new VideoDownloader();
+</script>
+
+</body>
+</html>
+
