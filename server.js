@@ -265,13 +265,6 @@ app.post("/api/summarize", async (req, res) => {
 });
 
 
-  // ------------------- TEST TRANSCRIPT FETCH (Optional Demo) -------------------
-  const videoUrl = "https://youtu.be/YyCXp_E4sMU";
-  YoutubeTranscript.fetchTranscript(videoUrl).then(transcript => {
-    const text = transcript.map(item => item.text).join(" ");
-    console.log("Transcript (demo):", text);
-  });
-
   // ------------------- START SERVER -------------------
   app.listen(PORT, () => {
     console.log(`✅ Video Downloader Backend running on port ${PORT}`);
